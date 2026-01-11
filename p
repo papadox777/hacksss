@@ -245,6 +245,7 @@ FOVCircle.Color = Color3.new(1, 0, 0)
 FOVCircle.Filled = false
 FOVCircle.Visible = false
 local AimbotKey = "E" -- Default key
+local AimbotTarget = nil -- Static target lock
 
 local FOVSlider = MainTab:CreateSlider({
    Name = "Aimbot FOV",
@@ -282,31 +283,57 @@ local AimbotToggle = MainTab:CreateToggle({
       AimbotEnabled = Value
       if AimbotEnabled then
          FOVCircle.Visible = true
-         AimbotConnection = game:GetService("RunService").RenderStepped:Connect(function()
-            local player = game.Players.LocalPlayer
-            local camera = workspace.CurrentCamera
-            local closest = nil
-            local closestAngle = FOV / 2
-            for _, p in pairs(game.Players:GetPlayers()) do
-               if p ~= player and p.Character then
-                  local head = p.Character:FindFirstChild("Head")
-                  if head then
-                     local direction = (head.Position - camera.CFrame.Position).Unit
-                     local angle = math.acos(camera.CFrame.LookVector:Dot(direction)) * (180 / math.pi)
-                     if angle < closestAngle then
-                        closest = head
-                        closestAngle = angle
-                     end
+         -- Find initial target
+         local player = game.Players.LocalPlayer
+         local camera = workspace.CurrentCamera
+         local closest = nil
+         local closestAngle = FOV / 2
+         for _, p in pairs(game.Players:GetPlayers()) do
+            if p ~= player and p.Character then
+               local head = p.Character:FindFirstChild("Head")
+               if head then
+                  local direction = (head.Position - camera.CFrame.Position).Unit
+                  local angle = math.acos(camera.CFrame.LookVector:Dot(direction)) * (180 / math.pi)
+                  if angle < closestAngle then
+                     closest = head
+                     closestAngle = angle
                   end
                end
             end
-            if closest then
-               local targetCFrame = CFrame.new(camera.CFrame.Position, closest.Position)
-               camera.CFrame = camera.CFrame:Lerp(targetCFrame, 0.3)  -- Increased strength (was 0.1)
+         end
+         AimbotTarget = closest -- Lock onto the closest target
+         AimbotConnection = game:GetService("RunService").RenderStepped:Connect(function()
+            if AimbotTarget and AimbotTarget.Parent and AimbotTarget.Parent.Parent and AimbotTarget.Parent.Parent:FindFirstChildOfClass("Humanoid") and AimbotTarget.Parent.Parent:FindFirstChildOfClass("Humanoid").Health > 0 then
+               -- Target is still valid, aim at it
+               local targetCFrame = CFrame.new(camera.CFrame.Position, AimbotTarget.Position)
+               camera.CFrame = camera.CFrame:Lerp(targetCFrame, 0.3)
+            else
+               -- Target invalid, find new one
+               local newClosest = nil
+               local newClosestAngle = FOV / 2
+               for _, p in pairs(game.Players:GetPlayers()) do
+                  if p ~= player and p.Character then
+                     local head = p.Character:FindFirstChild("Head")
+                     if head then
+                        local direction = (head.Position - camera.CFrame.Position).Unit
+                        local angle = math.acos(camera.CFrame.LookVector:Dot(direction)) * (180 / math.pi)
+                        if angle < newClosestAngle then
+                           newClosest = head
+                           newClosestAngle = angle
+                        end
+                     end
+                  end
+               end
+               AimbotTarget = newClosest
+               if AimbotTarget then
+                  local targetCFrame = CFrame.new(camera.CFrame.Position, AimbotTarget.Position)
+                  camera.CFrame = camera.CFrame:Lerp(targetCFrame, 0.3)
+               end
             end
          end)
       else
          FOVCircle.Visible = false
+         AimbotTarget = nil -- Reset target
          if AimbotConnection then
             AimbotConnection:Disconnect()
             AimbotConnection = nil
